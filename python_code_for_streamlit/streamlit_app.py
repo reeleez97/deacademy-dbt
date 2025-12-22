@@ -3,11 +3,9 @@ import snowflake.connector
 import plotly.express as px
 import pandas as pd
 
-# 1. Page Configuration
-st.set_page_config(layout="wide", page_title="Walmart Sales Analysis")
-st.title("📊 Walmart Sales Performance Analytics")
+st.set_page_config(layout="wide", page_title="Walmart Analytical Dashboard")
 
-# 2. Connection function using Streamlit Cloud Secrets
+# Initialize connection
 @st.cache_resource
 def init_connection():
     return snowflake.connector.connect(
@@ -17,72 +15,73 @@ def init_connection():
 
 conn = init_connection()
 
-# 3. Data Loading (Fetching from your Fact and Dim tables)
+# Load Data
 @st.cache_data
-def load_walmart_data():
+def get_data():
     query = """
-    SELECT 
-        F.STORE_ID, F.DEPT_ID, F.STORE_SIZE, F.STORE_WEEKLY_SALES,
-        F.TEMPERATURE, F.FUEL_PRICE, F.UNEMPLOYMENT, F.CPI,
-        F.MARKDOWN1, F.MARKDOWN2, F.MARKDOWN3, F.MARKDOWN4, F.MARKDOWN5,
-        D.STORE_DATE,
-        D.ISHOLIDAY AS HOLIDAY_FLAG,
-        YEAR(D.STORE_DATE) AS YEAR,
-        MONTHNAME(D.STORE_DATE) AS MONTH_NAME,
-        MONTH(D.STORE_DATE) AS MONTH_NUM,
-        S.STORE_TYPE
-    FROM WALMART_DB.ANALYTICS.WALMART_FACT_TABLE F
-    JOIN WALMART_DB.ANALYTICS.WALMART_DATE_DIM D ON F.DATE_ID = D.DATE_ID
-    JOIN WALMART_DB.ANALYTICS.WALMART_STORE_DIM S ON F.STORE_ID = S.STORE_ID AND F.DEPT_ID = S.DEPT_ID
-    WHERE F.VRSN_END_DATE IS NULL
+    SELECT f.*, d.STORE_DATE, d.ISHOLIDAY, s.STORE_TYPE
+    FROM WALMART_DB.ANALYTICS.WALMART_FACT_TABLE f
+    JOIN WALMART_DB.ANALYTICS.WALMART_DATE_DIM d ON f.DATE_ID = d.DATE_ID
+    JOIN WALMART_DB.ANALYTICS.WALMART_STORE_DIM s ON f.STORE_ID = s.STORE_ID AND f.DEPT_ID = s.DEPT_ID
+    WHERE f.is_current_version = TRUE
     """
-    with conn.cursor() as cur:
-        cur.execute(query)
-        return cur.fetch_pandas_all()
+    return pd.read_sql(query, conn)
 
-try:
-    df_raw = load_walmart_data()
-    
-    # Global Filter for Performance
-    st.sidebar.header("Dashboard Filter")
-    years = sorted(df_raw['YEAR'].unique())
-    sel_year = st.sidebar.selectbox("Choose Year", years)
-    df = df_raw[df_raw['YEAR'] == sel_year].copy()
+df = get_data()
+df['STORE_DATE'] = pd.to_datetime(df['STORE_DATE'])
+df['YEAR'] = df['STORE_DATE'].dt.year
+df['MONTH'] = df['STORE_DATE'].dt.month_name()
 
-    # --- THE 10 REPORTS ---
-    st.subheader("1. Weekly Sales by Store and Holiday")
-    st.plotly_chart(px.bar(df, x="STORE_ID", y="STORE_WEEKLY_SALES", color="HOLIDAY_FLAG", barmode="group"), use_container_width=True)
+st.title("🛒 Walmart Performance Analytics")
 
-    st.subheader("2. Weekly Sales by Temperature")
-    st.plotly_chart(px.scatter(df, x="TEMPERATURE", y="STORE_WEEKLY_SALES", render_mode="svg"), use_container_width=True)
+# 1. Weekly sales by store and holiday
+st.header("1. Weekly Sales by Store and Holiday")
+fig1 = px.bar(df, x="STORE_ID", y="STORE_WEEKLY_SALES", color="ISHOLIDAY", barmode="group")
+st.plotly_chart(fig1, use_container_width=True)
 
-    st.subheader("3. Weekly Sales by Store Size")
-    st.plotly_chart(px.scatter(df, x="STORE_SIZE", y="STORE_WEEKLY_SALES", color="STORE_TYPE"), use_container_width=True)
+# 2. Weekly sales by temperature and year
+st.header("2. Weekly Sales by Temperature and Year")
+fig2 = px.scatter(df, x="TEMPERATURE", y="STORE_WEEKLY_SALES", color="YEAR")
+st.plotly_chart(fig2, use_container_width=True)
 
-    st.subheader("4. Weekly Sales by Store Type and Month")
-    m_sales = df.groupby(['MONTH_NAME', 'STORE_TYPE', 'MONTH_NUM'])['STORE_WEEKLY_SALES'].sum().reset_index().sort_values('MONTH_NUM')
-    st.plotly_chart(px.line(m_sales, x="MONTH_NAME", y="STORE_WEEKLY_SALES", color="STORE_TYPE"), use_container_width=True)
+# 3. Weekly sales by store size
+st.header("3. Weekly Sales by Store Size")
+fig3 = px.scatter(df, x="STORE_SIZE", y="STORE_WEEKLY_SALES", color="STORE_TYPE")
+st.plotly_chart(fig3, use_container_width=True)
 
-    st.subheader("5. Markdown Sales by Store")
-    df['TOTAL_MARKDOWNS'] = df[['MARKDOWN1','MARKDOWN2','MARKDOWN3','MARKDOWN4','MARKDOWN5']].fillna(0).sum(axis=1)
-    st.plotly_chart(px.bar(df, x="STORE_ID", y="TOTAL_MARKDOWNS"), use_container_width=True)
+# 4. Weekly sales by store type and month
+st.header("4. Weekly Sales by Store Type and Month")
+fig4 = px.line(df.groupby(['MONTH', 'STORE_TYPE'])['STORE_WEEKLY_SALES'].sum().reset_index(), 
+              x="MONTH", y="STORE_WEEKLY_SALES", color="STORE_TYPE")
+st.plotly_chart(fig4, use_container_width=True)
 
-    st.subheader("6. Weekly Sales by Store Type")
-    st.plotly_chart(px.pie(df, values='STORE_WEEKLY_SALES', names='STORE_TYPE', hole=0.4), use_container_width=True)
+# 5. Markdown sales by year and store
+st.header("5. Markdown Sales by Year and Store")
+df['TOTAL_MARKDOWN'] = df[['MARKDOWN1','MARKDOWN2','MARKDOWN3','MARKDOWN4','MARKDOWN5']].sum(axis=1)
+fig5 = px.bar(df, x="STORE_ID", y="TOTAL_MARKDOWN", color="YEAR")
+st.plotly_chart(fig5, use_container_width=True)
 
-    st.subheader("7. Fuel Price Distribution")
-    st.plotly_chart(px.box(df, y="FUEL_PRICE"), use_container_width=True)
+# 6. Weekly sales by store type
+st.header("6. Weekly Sales by Store Type")
+fig6 = px.pie(df, values="STORE_WEEKLY_SALES", names="STORE_TYPE")
+st.plotly_chart(fig6, use_container_width=True)
 
-    st.subheader("8. Sales Timeline")
-    timeline = df.groupby('STORE_DATE')['STORE_WEEKLY_SALES'].sum().reset_index()
-    st.plotly_chart(px.line(timeline, x="STORE_DATE", y="STORE_WEEKLY_SALES"), use_container_width=True)
+# 7. Fuel price by year
+st.header("7. Fuel Price by Year")
+fig7 = px.box(df, x="YEAR", y="FUEL_PRICE")
+st.plotly_chart(fig7, use_container_width=True)
 
-    st.subheader("9. Weekly Sales by CPI")
-    st.plotly_chart(px.scatter(df, x="CPI", y="STORE_WEEKLY_SALES", opacity=0.3, render_mode="svg"), use_container_width=True)
+# 8. Weekly sales by year, month and date
+st.header("8. Weekly Sales Trend")
+fig8 = px.line(df.sort_values('STORE_DATE'), x="STORE_DATE", y="STORE_WEEKLY_SALES")
+st.plotly_chart(fig8, use_container_width=True)
 
-    st.subheader("10. Department Wise Weekly Sales")
-    d_sales = df.groupby('DEPT_ID')['STORE_WEEKLY_SALES'].sum().reset_index().sort_values('STORE_WEEKLY_SALES', ascending=False)
-    st.plotly_chart(px.bar(d_sales, x="DEPT_ID", y="STORE_WEEKLY_SALES"), use_container_width=True)
+# 9. Weekly sales by CPI
+st.header("9. Weekly Sales by CPI")
+fig9 = px.scatter(df, x="CPI", y="STORE_WEEKLY_SALES")
+st.plotly_chart(fig9, use_container_width=True)
 
-except Exception as e:
-    st.error(f"Error connecting to Snowflake: {e}")
+# 10. Department wise weekly sales
+st.header("10. Department Wise Weekly Sales")
+fig10 = px.bar(df.groupby('DEPT_ID')['STORE_WEEKLY_SALES'].sum().reset_index(), x="DEPT_ID", y="STORE_WEEKLY_SALES")
+st.plotly_chart(fig10, use_container_width=True)
