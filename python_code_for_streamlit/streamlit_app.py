@@ -70,7 +70,7 @@ try:
     # --- REPORT 5: Markdown sales by year and store ---
     st.header("5. Markdown Sales by Year and Store")
     df['TOTAL_MARKDOWNS'] = df[['MARKDOWN1','MARKDOWN2','MARKDOWN3','MARKDOWN4','MARKDOWN5']].fillna(0).sum(axis=1)
-    fig5 = px.bar(df, x="STORE_ID", y="YEAR_VAL", color="TOTAL_MARKDOWNS")
+    fig5 = px.bar(df, x="YEAR_VAL", y="STORE_ID", color="TOTAL_MARKDOWNS")
     st.plotly_chart(fig5, use_container_width=True)
 
     # --- REPORT 6: Weekly sales by store type ---
@@ -102,4 +102,5 @@ try:
 
 except Exception as e:
     st.error(f"Error connecting to Snowflake or processing data: {e}")
+
 
