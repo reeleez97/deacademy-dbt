@@ -1,0 +1,14 @@
+version: 2
+
+sources:
+  - name: walmart_raw
+    description: "Landing area for raw Walmart datasets loaded from S3."
+    database: WALMART_DB
+    schema: RAW
+    tables:
+      - name: dept_raw
+        description: "Primary source for department-level weekly sales and holiday status."
+      - name: stores_raw
+        description: "Master data for store attributes including type and size."
+      - name: fact_raw
+        description: "Environmental data containing temperature, fuel price, CPI, and unemployment."
