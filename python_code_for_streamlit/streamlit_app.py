@@ -5,9 +5,9 @@ import pandas as pd
 
 # 1. Page Configuration
 st.set_page_config(layout="wide", page_title="Walmart Analytical Dashboard")
-st.title("📊 Walmart Data Analysis: 10 Strategic Reports")
+st.title("📊 Walmart Data Analysis")
 
-# 2. Connection Logic (Connecting to your Snowflake Account)
+# 2. Connection Logic (Connecting to Snowflake Account)
 @st.cache_resource
 def init_connection():
     return snowflake.connector.connect(
@@ -17,7 +17,7 @@ def init_connection():
 
 conn = init_connection()
 
-# 3. Data Loading (Using your ANALYTICS schema tables)
+# 3. Data Loading (Using ANALYTICS schema tables)
 @st.cache_data
 def get_report_data():
     # We join the fact table with dims and filter for the active SCD2 record
@@ -102,5 +102,6 @@ try:
 
 except Exception as e:
     st.error(f"Error connecting to Snowflake or processing data: {e}")
+
 
 
